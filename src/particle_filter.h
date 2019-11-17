@@ -86,6 +86,12 @@ class ParticleFilter {
   void resample();
 
   /**
+   *  Calculate a single particle weight from observed measurements in 'particle' and 
+   * predicted landmarks from map. All is in map coordinates. 
+   */
+  void CalculateParticleWeight(Particle& particle, double std_landmark[], const std::vector<LandmarkObs> &predictedLandMarks); 
+
+  /**
    * Set a particles list of associations, along with the associations'
    *   calculated world x,y coordinates
    * This can be a very useful debugging tool to make sure transformations 

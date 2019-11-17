@@ -99,20 +99,53 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
    */
   for (auto& obs : observations)
   {
-    double minDist = 9.9e50;
+    double minDist = 9.9e50; // large number
     LandmarkObs bestFit;
     for (auto pred : predicted)
     {
       double d = dist(pred.x, pred.y, obs.x, obs.y); 
-      if (d<minDist)
+      if (d < minDist)
       {
         minDist = d;
         bestFit = pred;
       }
     } 
-    obs = bestFit;  
+    obs.id = bestFit.id;      
   }
 
+}
+
+  /**
+   *  Calculate a single particle weight from observed measurements in 'particle' and 
+   * predicted landmarks from map. All is in map coordinates. 
+   */
+  void ParticleFilter::CalculateParticleWeight(Particle& particle, double std_landmark[], const vector<LandmarkObs> &predictedLandMarks) 
+  {
+
+  double weight = 1.0;  // particle weight
+
+  // Loop through associations and calcualte partial probability
+  for (uint n; n < particle.associations.size(); n++)
+  {
+    int lmId = particle.associations[n];
+
+    LandmarkObs pred_LM_match;
+    // Find LM association in 
+    for (auto pred_LM : predictedLandMarks)
+    {
+      if (lmId == pred_LM.id)
+      {
+        pred_LM_match = pred_LM;
+        break;
+      }
+    }
+    
+    // Calculate probability
+    weight *= multiv_prob(std_landmark[0], std_landmark[1], particle.sense_x[n], particle.sense_y[n], pred_LM_match.x, pred_LM_match.y);
+  }
+
+  // Update weight
+  particle.weight = weight;
 }
 
 void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], 
@@ -132,6 +165,64 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
    *   (look at equation 3.33) http://planning.cs.uiuc.edu/node99.html
    */
 
+  vector<LandmarkObs> observations_mapCoordinates;
+  vector<LandmarkObs> predictedLMs;
+
+  for (int n=0; n<num_particles; n++)
+  { 
+    // Clear observations and predicted landmarks for new particle
+    observations_mapCoordinates.clear();
+    predictedLMs.clear();
+
+    // Get observations in map coordinates
+    for (uint m; m<observations.size(); m++)
+    {
+      observations_mapCoordinates[m].x = particles[n].x + cos(particles[n].theta)*observations[m].x - sin(particles[n].theta)*observations[m].y;
+      observations_mapCoordinates[m].y = particles[n].y + sin(particles[n].theta)*observations[m].x + cos(particles[n].theta)*observations[m].y; 
+    }
+
+    // Find nearest predicted landmarks to particles within sensor range
+    for (auto landmark : map_landmarks.landmark_list)
+    {
+      LandmarkObs lm;
+      lm.id = landmark.id_i;
+      lm.x = landmark.x_f;
+      lm.y = landmark.y_f;
+
+      double d = dist(lm.x, lm.y, particles[n].x, particles[n].y); 
+      if (d < sensor_range)
+      {
+        predictedLMs.push_back(lm);
+      }
+    }
+
+    // Associate observations with predicted landmarks
+    dataAssociation(predictedLMs, observations_mapCoordinates);
+
+    // Copy data from observations into particle
+    particles[n].sense_x.clear();
+    particles[n].sense_y.clear();
+    particles[n].associations.clear();
+    for (auto obs : observations_mapCoordinates)
+    {
+      particles[n].sense_x.push_back(obs.x);
+      particles[n].sense_y.push_back(obs.y);
+      particles[n].associations.push_back(obs.id);
+    }
+
+    CalculateParticleWeight(particles[n], std_landmark, predictedLMs); 
+  }
+
+  // Normalize weights
+  double sum = 0.0;
+  for (int n=0; n<num_particles; n++)
+  {
+    sum += particles[n].weight;
+  }
+  for (int n=0; n<num_particles; n++)
+  {
+    particles[n].weight = particles[n].weight/sum;
+  }
 }
 
 void ParticleFilter::resample() {
@@ -141,6 +232,27 @@ void ParticleFilter::resample() {
    * NOTE: You may find std::discrete_distribution helpful here.
    *   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
    */
+  std::vector<Particle> newParticles;
+  std::default_random_engine gen;
+  vector<double> weights;
+  // Generate vector with all weights
+  for (int n=0; n<num_particles; n++)
+  {
+    weights.push_back(particles[n].weight);
+  }
+
+  // Use discrete_distribution to sample with probability proportional to their weight.  
+  std::discrete_distribution<int> particleDistr(weights.begin(),weights.end());
+
+  // Generate vector with new particles
+  for (int n=0; n<num_particles; n++)
+  {
+    int pIdx = particleDistr(gen);
+    newParticles.push_back(particles[pIdx]);  // resamble
+  }
+
+  // overwrite old particles
+  particles = newParticles;
 
 }
 
