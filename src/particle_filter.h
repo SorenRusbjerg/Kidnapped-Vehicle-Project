@@ -12,6 +12,8 @@
 #include <string>
 #include <vector>
 #include "helper_functions.h"
+#include <iostream>
+#include <fstream>
 
 struct Particle {
   int id;
@@ -100,6 +102,16 @@ class ParticleFilter {
   void SetAssociations(Particle& particle, const std::vector<int>& associations,
                        const std::vector<double>& sense_x, 
                        const std::vector<double>& sense_y);
+
+  /**
+   * Print particle data to console.
+   */
+  void PrintParticleData(const Particle& particle, std::fstream& fileStream);
+
+  /**
+   * Print all particles data to console.
+   */
+  void PrintAllParticlesData(std::fstream& fileStream);
 
   /**
    * initialized Returns whether particle filter is initialized yet or not.

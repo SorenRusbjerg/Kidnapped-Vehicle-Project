@@ -25,14 +25,14 @@ using std::normal_distribution;
 
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
   /**
-   * TODO: Set the number of particles. Initialize all particles to 
+   *  Set the number of particles. Initialize all particles to 
    *   first position (based on estimates of x, y, theta and their uncertainties
    *   from GPS) and all weights to 1. 
-   * TODO: Add random Gaussian noise to each particle.
+   *  Add random Gaussian noise to each particle.
    * NOTE: Consult particle_filter.h for more information about this method 
    *   (and others in this file).
    */
-  num_particles = 10;  // TODO: Set the number of particles
+  num_particles = 100;  //  Set the number of particles
 
   // This line creates a normal (Gaussian) distribution for x, y and theta
   std::default_random_engine randGen;
@@ -53,12 +53,14 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
     particles.push_back(newParticle);    
   } 
 
+  is_initialized = true;
+
 }
 
 void ParticleFilter::prediction(double delta_t, double std_pos[], 
                                 double velocity, double yaw_rate) {
   /**
-   * TODO: Add measurements to each particle and add random Gaussian noise.
+   * Add measurements to each particle and add random Gaussian noise.
    * NOTE: When adding noise you may find std::normal_distribution 
    *   and std::default_random_engine useful.
    *  http://en.cppreference.com/w/cpp/numeric/random/normal_distribution
@@ -90,7 +92,7 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
 void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted, 
                                      vector<LandmarkObs>& observations) {
   /**
-   * TODO: Find the predicted measurement that is closest to each 
+   * Find the predicted measurement that is closest to each 
    *   observed measurement and assign the observed measurement to this 
    *   particular landmark.
    * NOTE: this method will NOT be called by the grading code. But you will 
@@ -125,7 +127,7 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
   double weight = 1.0;  // particle weight
 
   // Loop through associations and calcualte partial probability
-  for (uint n; n < particle.associations.size(); n++)
+  for (uint n=0; n < particle.associations.size(); n++)
   {
     int lmId = particle.associations[n];
 
@@ -144,7 +146,7 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
     weight *= multiv_prob(std_landmark[0], std_landmark[1], particle.sense_x[n], particle.sense_y[n], pred_LM_match.x, pred_LM_match.y);
   }
 
-  // Update weight
+  // Update weight  
   particle.weight = weight;
 }
 
@@ -152,7 +154,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
                                    const vector<LandmarkObs> &observations, 
                                    const Map &map_landmarks) {
   /**
-   * TODO: Update the weights of each particle using a mult-variate Gaussian 
+   * Update the weights of each particle using a mult-variate Gaussian 
    *   distribution. You can read more about this distribution here: 
    *   https://en.wikipedia.org/wiki/Multivariate_normal_distribution
    * NOTE: The observations are given in the VEHICLE'S coordinate system. 
@@ -173,12 +175,15 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
     // Clear observations and predicted landmarks for new particle
     observations_mapCoordinates.clear();
     predictedLMs.clear();
-
+ 
     // Get observations in map coordinates
-    for (uint m; m<observations.size(); m++)
+    for (uint m=0; m<observations.size(); m++)
     {
-      observations_mapCoordinates[m].x = particles[n].x + cos(particles[n].theta)*observations[m].x - sin(particles[n].theta)*observations[m].y;
-      observations_mapCoordinates[m].y = particles[n].y + sin(particles[n].theta)*observations[m].x + cos(particles[n].theta)*observations[m].y; 
+      LandmarkObs obs_lm;
+      obs_lm.x = particles[n].x + cos(particles[n].theta)*observations[m].x - sin(particles[n].theta)*observations[m].y;
+      obs_lm.y = particles[n].y + sin(particles[n].theta)*observations[m].x + cos(particles[n].theta)*observations[m].y; 
+      obs_lm.id = observations[m].id;
+      observations_mapCoordinates.push_back(obs_lm);
     }
 
     // Find nearest predicted landmarks to particles within sensor range
@@ -207,27 +212,30 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
     {
       particles[n].sense_x.push_back(obs.x);
       particles[n].sense_y.push_back(obs.y);
-      particles[n].associations.push_back(obs.id);
-    }
-
+      particles[n].associations.push_back(obs.id);    
+    }    
+    
     CalculateParticleWeight(particles[n], std_landmark, predictedLMs); 
   }
 
   // Normalize weights
   double sum = 0.0;
-  for (int n=0; n<num_particles; n++)
+  for (int n = 0; n < num_particles; n++)
   {
     sum += particles[n].weight;
   }
-  for (int n=0; n<num_particles; n++)
+  if (sum > 1e-5)  // avoid divide by 0
   {
-    particles[n].weight = particles[n].weight/sum;
+    for (int n = 0; n < num_particles; n++)
+    {
+      particles[n].weight = particles[n].weight / sum;
+    }
   }
 }
 
 void ParticleFilter::resample() {
   /**
-   * TODO: Resample particles with replacement with probability proportional 
+   * Resample particles with replacement with probability proportional 
    *   to their weight. 
    * NOTE: You may find std::discrete_distribution helpful here.
    *   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
@@ -293,4 +301,30 @@ string ParticleFilter::getSenseCoord(Particle best, string coord) {
   string s = ss.str();
   s = s.substr(0, s.length()-1);  // get rid of the trailing space
   return s;
+
 }
+
+    /**
+   * Print particle data to console.
+   */
+  void ParticleFilter::PrintParticleData(const Particle& particle, std::fstream& fileStream)
+  {
+    string ass = string(getAssociations(particle));
+    fileStream << "\nParticle " << particle.id << "\nXpos: " << particle.x << "\nYpos: " << particle.y
+         << "\nTheta: " << particle.theta << "\nWeight: " << particle.weight
+         << "\nAssociations: " << ass.c_str() << std::endl;        
+  }
+
+
+  /**
+   * Print all particles data to console.
+   */
+  void ParticleFilter::PrintAllParticlesData(std::fstream& fileStream)
+  {
+    for (int n=0; n<num_particles; n++)
+    {
+      PrintParticleData(particles[n], fileStream);
+    }
+    fileStream << "=======================================================\n";
+    fileStream.flush();
+  }
